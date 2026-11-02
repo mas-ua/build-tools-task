@@ -1,37 +1,51 @@
-import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import org.springframework.boot.gradle.tasks.run.BootRun
 
 plugins {
-  	id("org.springframework.boot") version "3.1.0"
-  	id("io.spring.dependency-management") version "1.1.0"
-  	kotlin("jvm") version "1.8.21"
-  	kotlin("plugin.spring") version "1.8.21"
-	kotlin("plugin.serialization") version "1.8.21"
+    id("org.springframework.boot") version "3.2.0" // Укажите вашу актуальную версию Boot
+    id("io.spring.dependency-management") version "1.1.4"
+    kotlin("jvm") version "1.9.20"
 }
 
-group = "academy.softserve"
-version = "0.0.1-SNAPSHOT"
-java {
-	sourceCompatibility = JavaVersion.VERSION_17
+// ... существующие настройки репозиториев и зависимостей ...
+
+// Задача 1: Установка npm-зависимостей внутри папки ui
+val npmInstall by tasks.registering(Exec::class) {
+    workingDir = file("ui")
+    // Для Windows используется "npm.cmd", для Linux/macOS — "npm"
+    if (System.getProperty("os.name").lowercase().contains("windows")) {
+        commandLine("cmd", "/c", "npm i")
+    } else {
+        commandLine("npm", "i")
+    }
 }
 
-repositories {
-	mavenCentral()
+// Задача 2: Компиляция фронтенда через Webpack (зависит от npmInstall)
+val compileUi by tasks.registering(Exec::class) {
+    dependsOn(npmInstall)
+    workingDir = file("ui")
+    if (System.getProperty("os.name").lowercase().contains("windows")) {
+        commandLine("cmd", "/c", "npm run build")
+    } else {
+        commandLine("npm", "run", "build")
+    }
 }
 
-dependencies {
-	implementation("org.springframework.boot:spring-boot-starter-webflux")
-	implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
-	implementation("io.projectreactor.kotlin:reactor-kotlin-extensions")
-	implementation("org.jetbrains.kotlin:kotlin-reflect")
-	implementation("org.jetbrains.kotlinx:kotlinx-coroutines-reactor")
+// Задача 3: Копирование собранных файлов фронтенда в ресурсы Spring Boot (зависит от compileUi)
+val copyUi by tasks.registering(Copy::class) {
+    dependsOn(compileUi)
+    
+    // Откуда копируем (результаты сборки Webpack)
+    from("ui/dist/index.html")
+    from("ui/dist/app.js")
+    from("ui/dist/css") {
+        into("css") // Помещает папку css внутрь целевой директории
+    }
+    
+    // Куда копируем (в статическую директорию ресурсов бэкенда)
+    into("src/main/resources/static") 
 }
 
-tasks.withType<KotlinCompile> {
-	kotlinOptions {
-		freeCompilerArgs += "-Xjsr305=strict"
-		jvmTarget = "17"
-	}
+// Настройка зависимости: Любая задача типа BootRun должна зависеть от copyUi
+tasks.withType<BootRun> {
+    dependsOn(copyUi)
 }
-
-
-// TODO: your code starts here
